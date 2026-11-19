@@ -5,9 +5,9 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>EveryoneGetsOne</AssemblyName>
     <RootNamespace>EveryoneGetsOne</RootNamespace>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Version>1.1.1</Version>
+    <FileVersion>1.1.1.0</FileVersion>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
     <CodePage>65001</CodePage>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>

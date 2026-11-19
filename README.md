@@ -1,4 +1,4 @@
-# 雨中冒险2 全员拾取（EveryoneGetsOne）v1.1.0 — 联机掉落共享 Mod
+﻿# 雨中冒险2 全员拾取（EveryoneGetsOne）v1.1.1 — 联机掉落共享 Mod
 
 > 每个掉落每人一份 · 统率神器每人各选一次 · 已领取物品本地隐藏并过滤雷达
 
@@ -24,7 +24,7 @@
    ```
    Risk of Rain 2\BepInEx\plugins\EveryoneGetsOne\EveryoneGetsOne.dll
    ```
-3. 启动游戏。日志里出现 `EveryoneGetsOne v1.1.0 loaded.` 和 `Harmony patches applied to 11 method(s).` 即安装成功。
+3. 启动游戏。日志里出现 `EveryoneGetsOne v1.1.1 loaded.` 和 `Harmony patches applied to 11 method(s).` 即安装成功。
 
 ### 联机注意
 
@@ -86,6 +86,13 @@ dotnet build .\EveryoneGetsOne.csproj -c Release -p:GameDir="你的游戏目录"
 
 ## 更新日志
 
+### 1.1.1
+
+- 修复部分角色/特殊 body 被误判为永久阵亡，导致共享玩家列表为空、掉落回退原版的问题。
+- 玩家列表改为 `PlayerCharacterMasterController` + `NetworkUser` + `CharacterMaster` 三路兜底并去重。
+- 修复主机领取后本地隐藏不执行的问题（不再依赖 `connectionToClient`）。
+- 可见性代码加异常保护，不再影响物品发放。
+- 新增 `[Diag]` 阶段日志和 `Claim` / `Command pick` 领取日志。
 ### 1.1.0
 
 - 新增：已领取/已选择的掉落物在领取者客户端本地隐藏。

@@ -54,6 +54,52 @@ namespace EveryoneGetsOne
         }
 
         /// <summary>
+        /// One-line-per-stage diagnostic written to the BepInEx log.  It shows
+        /// whether this peer is the host and how the living players are being
+        /// classified, which is the fastest way to spot a broken collector
+        /// list when loot sharing silently falls back to vanilla.
+        /// </summary>
+        internal static void LogDiagnostics()
+        {
+            if (!EveryoneGetsOnePlugin.Enable.Value)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!NetworkServer.active)
+                {
+                    EveryoneGetsOnePlugin.Log.LogInfo(
+                        "[Diag] client mode; localUsers=" + LocalUserManager.readOnlyLocalUsersList.Count +
+                        "; playerMasters=" + PlayerCharacterMasterController.instances.Count);
+                    return;
+                }
+
+                CollectAllPlayers(AllPlayers);
+                CollectCollectors(Collectors);
+                EveryoneGetsOnePlugin.Log.LogInfo(
+                    "[Diag] host mode; playerMasters=" + AllPlayers.Count +
+                    "; networkUsers=" + NetworkUser.readOnlyInstancesList.Count +
+                    "; collectors=" + Collectors.Count);
+
+                for (int i = 0; i < AllPlayers.Count; i++)
+                {
+                    CharacterMaster master = AllPlayers[i];
+                    EveryoneGetsOnePlugin.Log.LogInfo(
+                        "[Diag]   " + (Util.GetBestMasterName(master) ?? "???") +
+                        " alive=" + IsAlive(master) +
+                        " deadOut=" + master.IsDeadAndOutOfLivesServer() +
+                        " pcm=" + (master.playerCharacterMasterController != null));
+                }
+            }
+            catch (Exception ex)
+            {
+                EveryoneGetsOnePlugin.Log.LogWarning("Diagnostics failed: " + ex);
+            }
+        }
+
+        /// <summary>
         /// Command cubes are the only PickupPickerControllers created by
         /// PickupDropletController.CreateCommandCube.  On the server the
         /// pickupThatGeneratedOptions field is set; on clients only the prefab
@@ -133,49 +179,91 @@ namespace EveryoneGetsOne
             return claim;
         }
 
-        internal static void CollectCollectors(List<CharacterMaster> into)
+        /// <summary>
+        /// A body is alive when it exists and its HealthComponent says so.
+        /// Do not use IsDeadAndOutOfLivesServer as the first check: some DLC /
+        /// special bodies carry a BodyHandlingConfig whose flags make that
+        /// method return true even while the body is alive, which would empty
+        /// the collector list and silently fall back to vanilla loot.
+        /// </summary>
+        internal static bool IsAlive(CharacterMaster master)
         {
-            into.Clear();
-            foreach (PlayerCharacterMasterController player in PlayerCharacterMasterController.instances)
+            if (!master)
             {
-                if (!player)
-                {
-                    continue;
-                }
+                return false;
+            }
 
-                CharacterMaster master = player.master;
-                if (!master || !master.inventory)
-                {
-                    continue;
-                }
+            CharacterBody body = master.GetBody();
+            return body && body.healthComponent && body.healthComponent.alive;
+        }
 
-                // Permanently dead players cannot walk over a drop and cannot
-                // use a Command cube.  They must not block it forever.
+        private static void AddPlayerMaster(
+            List<CharacterMaster> into,
+            CharacterMaster master,
+            bool collectorsOnly)
+        {
+            if (!master || !master.inventory || into.Contains(master))
+            {
+                return;
+            }
+
+            if (collectorsOnly && !IsAlive(master))
+            {
+                // A dead player with revives still needs the drop and must not
+                // block it forever.  Only permanently dead players are skipped.
                 if (master.IsDeadAndOutOfLivesServer())
                 {
-                    continue;
+                    return;
                 }
-
-                into.Add(master);
             }
+
+            into.Add(master);
+        }
+
+        private static void CollectPlayers(List<CharacterMaster> into, bool collectorsOnly)
+        {
+            into.Clear();
+
+            foreach (PlayerCharacterMasterController player in PlayerCharacterMasterController.instances)
+            {
+                if (player)
+                {
+                    AddPlayerMaster(into, player.master, collectorsOnly);
+                }
+            }
+
+            // PlayerCharacterMasterController.instances can be incomplete
+            // during character swaps / DLC body changes.  NetworkUser is the
+            // authoritative list of connected players, so use it as a
+            // fallback and de-duplicate by master reference.
+            foreach (NetworkUser user in NetworkUser.readOnlyInstancesList)
+            {
+                if (user)
+                {
+                    AddPlayerMaster(into, user.master, collectorsOnly);
+                }
+            }
+
+            // Last fallback: every player master in the scene, even if neither
+            // of the two player lists has caught up yet (character swaps,
+            // joining mid-stage, special DLC bodies).
+            foreach (CharacterMaster master in CharacterMaster.readOnlyInstancesList)
+            {
+                if (master && master.playerCharacterMasterController)
+                {
+                    AddPlayerMaster(into, master, collectorsOnly);
+                }
+            }
+        }
+
+        internal static void CollectCollectors(List<CharacterMaster> into)
+        {
+            CollectPlayers(into, collectorsOnly: true);
         }
 
         private static void CollectAllPlayers(List<CharacterMaster> into)
         {
-            into.Clear();
-            foreach (PlayerCharacterMasterController player in PlayerCharacterMasterController.instances)
-            {
-                if (!player)
-                {
-                    continue;
-                }
-
-                CharacterMaster master = player.master;
-                if (master && master.inventory)
-                {
-                    into.Add(master);
-                }
-            }
+            CollectPlayers(into, collectorsOnly: false);
         }
 
         internal static bool AllCollectorsClaimed(HashSet<CharacterMaster> claimed)
@@ -203,6 +291,11 @@ namespace EveryoneGetsOne
             {
                 CharacterMaster master = AllPlayers[i];
                 if (!master || claim.Claimed.Contains(master))
+                {
+                    continue;
+                }
+
+                if (IsAlive(master))
                 {
                     continue;
                 }
@@ -239,7 +332,7 @@ namespace EveryoneGetsOne
             }
 
             CharacterBody body = master.GetBody();
-            if (body && master.IsDeadAndOutOfLivesServer())
+            if (body && !IsAlive(master) && master.IsDeadAndOutOfLivesServer())
             {
                 // Do not play pickup effects on a corpse; go through the
                 // inventory-only path below.
@@ -344,40 +437,50 @@ namespace EveryoneGetsOne
                 return;
             }
 
-            int done = 0;
-            for (int i = 0; i < collectors.Count; i++)
+            try
             {
-                if (claimed.Contains(collectors[i]))
+                int done = 0;
+                for (int i = 0; i < collectors.Count; i++)
                 {
-                    done++;
+                    if (claimed.Contains(collectors[i]))
+                    {
+                        done++;
+                    }
+                }
+
+                string playerName = Util.GetBestMasterName(master);
+                if (string.IsNullOrEmpty(playerName))
+                {
+                    playerName = "???";
+                }
+
+                string itemName = string.IsNullOrEmpty(pickupDef.nameToken)
+                    ? "???"
+                    : Language.GetString(pickupDef.nameToken);
+                if (string.IsNullOrEmpty(itemName))
+                {
+                    itemName = "???";
+                }
+
+                Chat.SendBroadcastChat(new Chat.SimpleChatMessage
+                {
+                    baseToken = "<style=cIsUtility>[全员拾取] {0} " + verb + " {1}（{2}/{3}）</style>",
+                    paramTokens = new string[]
+                    {
+                        playerName,
+                        itemName,
+                        done.ToString(),
+                        collectors.Count.ToString()
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                if (EveryoneGetsOnePlugin.VerboseLog.Value)
+                {
+                    EveryoneGetsOnePlugin.Log.LogWarning("Announce failed: " + ex);
                 }
             }
-
-            string playerName = Util.GetBestMasterName(master);
-            if (string.IsNullOrEmpty(playerName))
-            {
-                playerName = "???";
-            }
-
-            string itemName = string.IsNullOrEmpty(pickupDef.nameToken)
-                ? "???"
-                : Language.GetString(pickupDef.nameToken);
-            if (string.IsNullOrEmpty(itemName))
-            {
-                itemName = "???";
-            }
-
-            Chat.SendBroadcastChat(new Chat.SimpleChatMessage
-            {
-                baseToken = "<style=cIsUtility>[全员拾取] {0} " + verb + " {1}（{2}/{3}）</style>",
-                paramTokens = new string[]
-                {
-                    playerName,
-                    itemName,
-                    done.ToString(),
-                    collectors.Count.ToString()
-                }
-            });
         }
 
         internal static void DestroyCube(PickupPickerController cube)
@@ -450,34 +553,54 @@ namespace EveryoneGetsOne
                 return;
             }
 
-            NetworkIdentity identity = pickupObject.GetComponent<NetworkIdentity>();
-            if (identity == null || identity.netId.IsEmpty())
+            // Visibility is cosmetic.  Never let a render / network-message
+            // problem bubble up into the pickup grant path.
+            try
             {
-                return;
-            }
+                NetworkIdentity identity = pickupObject.GetComponent<NetworkIdentity>();
+                if (identity == null || identity.netId.IsEmpty())
+                {
+                    return;
+                }
 
-            LocalUser localUser = LocalUserManager.GetFirstLocalUser();
-            if (localUser != null && localUser.cachedMaster == master)
-            {
-                LocalHide.Hide(pickupObject);
-                return;
-            }
+                PlayerCharacterMasterController controller = master.playerCharacterMasterController;
+                NetworkUser user = controller ? controller.networkUser : null;
+                LocalUser localUser = LocalUserManager.GetFirstLocalUser();
 
-            PlayerCharacterMasterController controller = master.playerCharacterMasterController;
-            NetworkUser user = controller ? controller.networkUser : null;
-            NetworkConnection connection = user ? user.connectionToClient : null;
-            if (connection == null || !connection.isConnected)
-            {
-                return;
-            }
-            if (!NetworkCompat.ModdedConnections.Contains(connection))
-            {
-                return;
-            }
+                // The host's own NetworkUser may not have a connectionToClient,
+                // so explicitly treat the local player as local.  Otherwise the
+                // host would never hide its own claimed pickups.
+                bool isLocal =
+                    (localUser != null && localUser.cachedMaster == master) ||
+                    (user != null && user.isLocalPlayer);
 
-            connection.Send(
-                HidePickupMessage.MsgType,
-                new HidePickupMessage(identity.netId.Value));
+                if (isLocal)
+                {
+                    LocalHide.Hide(pickupObject);
+                    return;
+                }
+
+                NetworkConnection connection = user ? user.connectionToClient : null;
+                if (connection == null || !connection.isConnected)
+                {
+                    return;
+                }
+                if (!NetworkCompat.ModdedConnections.Contains(connection))
+                {
+                    return;
+                }
+
+                connection.Send(
+                    HidePickupMessage.MsgType,
+                    new HidePickupMessage(identity.netId.Value));
+            }
+            catch (Exception ex)
+            {
+                if (EveryoneGetsOnePlugin.VerboseLog.Value)
+                {
+                    EveryoneGetsOnePlugin.Log.LogWarning("NotifyClaimed failed: " + ex);
+                }
+            }
         }
 
         /// <summary>

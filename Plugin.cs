@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
@@ -13,7 +13,7 @@ namespace EveryoneGetsOne
     public sealed class EveryoneGetsOnePlugin : BaseUnityPlugin
     {
         public const string Guid = "com.liaojinghua.ror2.everyonegetsone";
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<bool> Enable;
@@ -89,6 +89,7 @@ namespace EveryoneGetsOne
         private static void OnStageStart(Stage stage)
         {
             LootShare.ResetForStage();
+            LootShare.LogDiagnostics();
             if (VerboseLog != null && VerboseLog.Value)
             {
                 Log.LogInfo("Stage start: shared-loot state cleared.");

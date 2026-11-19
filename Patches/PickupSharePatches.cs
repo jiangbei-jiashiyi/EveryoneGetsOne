@@ -37,10 +37,6 @@ namespace EveryoneGetsOne.Patches
             {
                 return true;
             }
-            if (body.master.playerCharacterMasterController == null)
-            {
-                return true;
-            }
 
             PickupDef pickupDef = PickupCatalog.GetPickupDef(__instance.pickup.pickupIndex);
             if (pickupDef == null || pickupDef.itemIndex == ItemIndex.None)
@@ -70,6 +66,11 @@ namespace EveryoneGetsOne.Patches
             claim.Claimed.Add(master);
             LootShare.CollectCollectors(LootShare.Collectors);
             LootShare.Announce(master, pickupDef, claim.Claimed, LootShare.Collectors, "领取了");
+            EveryoneGetsOnePlugin.Log.LogInfo(
+                "Claim " + (pickupDef.internalName ?? "?") +
+                " by " + (Util.GetBestMasterName(master) ?? "???") +
+                "; collectors=" + LootShare.Collectors.Count +
+                ", claimed=" + claim.Claimed.Count);
 
             if (LootShare.AllCollectorsClaimed(claim.Claimed))
             {

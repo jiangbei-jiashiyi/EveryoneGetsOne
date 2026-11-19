@@ -94,6 +94,11 @@ namespace EveryoneGetsOne.Patches
 
             LootShare.CollectCollectors(LootShare.Collectors);
             LootShare.Announce(master, pickupDef, claim.Claimed, LootShare.Collectors, "选择了");
+            EveryoneGetsOnePlugin.Log.LogInfo(
+                "Command pick " + (pickupDef.internalName ?? "?") +
+                " by " + (Util.GetBestMasterName(master) ?? "???") +
+                "; collectors=" + LootShare.Collectors.Count +
+                ", claimed=" + claim.Claimed.Count);
 
             if (LootShare.AllCollectorsClaimed(claim.Claimed))
             {
@@ -201,7 +206,17 @@ namespace EveryoneGetsOne.Patches
             LootShare.MarkLocalCubePicked(__instance);
             if (EveryoneGetsOnePlugin.HideClaimedPickups.Value)
             {
-                LocalHide.Hide(__instance.gameObject);
+                try
+                {
+                    LocalHide.Hide(__instance.gameObject);
+                }
+                catch (Exception ex)
+                {
+                    if (EveryoneGetsOnePlugin.VerboseLog.Value)
+                    {
+                        EveryoneGetsOnePlugin.Log.LogWarning("Local command hide failed: " + ex);
+                    }
+                }
             }
         }
     }
