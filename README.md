@@ -1,10 +1,12 @@
-﻿# EveryoneGetsOne（全员拾取）v1.1.0
+# 雨中冒险2 全员拾取（EveryoneGetsOne）v1.1.0 — 联机掉落共享 Mod
+
+> 每个掉落每人一份 · 统率神器每人各选一次 · 已领取物品本地隐藏并过滤雷达
 
 雨中冒险 2 联机掉落共享 Mod：同一个掉落物，每名玩家都能领取一次；开启统率神器时，每名玩家都能从同一个统率精魄里各选一次自己的物品。
 
 已领取/已选择过的掉落物只在领取者自己的客户端隐藏，不再被雷达扫描装置扫到，也不会再出现标记图标；尚未领取的玩家仍然正常看得到。
 
-**下载安装包**：[GitHub Releases](https://github.com/jiangbei-jiashiyi/quanyuanshiqu/releases)
+**下载安装包**：[GitHub Releases](https://github.com/jiangbei-jiashiyi/EveryoneGetsOne/releases)
 
 ## 功能
 
